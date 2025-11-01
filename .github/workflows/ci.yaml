@@ -19,21 +19,16 @@ jobs:
     name: Lint & Type Check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install uv (fast pip/venv)
+      - name: Install uv + tools
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Create venv and install tools
-        run: |
           uv venv
           . .venv/bin/activate
           uv pip install ruff black mypy pre-commit
@@ -48,29 +43,14 @@ jobs:
           . .venv/bin/activate
           mypy src || true
 
-  build-mlflow-image:
-    name: Build MLflow image
+  integration-train:
+    name: Integration (compose up + smoke train)
     runs-on: ubuntu-latest
     needs: [lint-and-type]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build MLflow image (Docker Compose)
-        run: |
-          cd infra
-          docker compose --env-file .env build mlflow
-
-  integration-train:
-    name: Integration (docker compose + smoke train)
-    runs-on: ubuntu-latest
-    needs: [build-mlflow-image]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -82,15 +62,21 @@ jobs:
           . .venv/bin/activate
           uv pip install -r requirements.txt
 
+      - name: Build MLflow image (local)
+        run: |
+          cd infra
+          docker compose --env-file .env build mlflow
+
       - name: Start infra (Postgres, MinIO, MLflow + bucket)
         run: |
           cd infra
           docker compose --env-file .env up -d
-          # aguarda saúde dos serviços e MLflow pronto
-          echo "Waiting for MLflow to be ready..."
-          for i in {1..60}; do
-            if curl -fsS "http://localhost:$(grep -E '^MLFLOW_PORT=' .env | cut -d= -f2)/"; then
-              echo "MLflow is up!"
+          docker compose ps
+          echo "Waiting for MLflow API to be ready..."
+          MLFLOW_PORT=$(grep -E '^MLFLOW_PORT=' .env | cut -d= -f2)
+          for i in {1..90}; do
+            if curl -fsS "http://localhost:${MLFLOW_PORT}/api/2.0/mlflow/experiments/list" >/dev/null; then
+              echo "MLflow API is up!"
               break
             fi
             sleep 2
@@ -102,9 +88,27 @@ jobs:
           make env-host
           make train
 
-      - name: Curl MLflow UI (sanity check)
+      - name: Curl MLflow root (sanity)
         run: |
           curl -I "http://localhost:$(grep -E '^MLFLOW_PORT=' infra/.env | cut -d= -f2)/" || exit 1
+
+      - name: Collect docker status & logs (for debugging)
+        if: always()
+        run: |
+          mkdir -p ci-logs
+          cd infra
+          docker compose ps > ../ci-logs/compose-ps.txt || true
+          docker compose logs postgres > ../ci-logs/postgres.log || true
+          docker compose logs minio > ../ci-logs/minio.log || true
+          docker compose logs minio-setup > ../ci-logs/minio-setup.log || true
+          docker compose logs mlflow > ../ci-logs/mlflow.log || true
+
+      - name: Upload logs artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-logs
+          path: ci-logs
 
       - name: Teardown infra
         if: always()
