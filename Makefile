@@ -22,6 +22,9 @@ env-host:
 	export AWS_EC2_METADATA_DISABLED=true; \
 	python -c 'import os; print("Tracking:", os.getenv("MLFLOW_TRACKING_URI")); print("Artifacts:", os.getenv("MLFLOW_S3_ENDPOINT_URL")); print("AWS key present?", bool(os.getenv("AWS_ACCESS_KEY_ID")))'
 
+ensure-dotenv:
+	@test -f infra/.env || (cp infra/.env.example infra/.env && echo "infra/.env criado a partir de .env.example")
+
 up:
 	cd infra && docker compose --env-file .env up -d
 
