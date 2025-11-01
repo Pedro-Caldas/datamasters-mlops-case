@@ -53,8 +53,9 @@ jobs:
       - name: Prepare env file for compose
         run: |
           cp infra/.env.example infra/.env
-          echo "Generated infra/.env:"
-          sed -e 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=****/' infra/.env
+          echo "Generated infra/.env (masked):"
+          sed -e 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=****/' \
+              -e 's/^S3_SECRET_KEY=.*/S3_SECRET_KEY=****/' infra/.env
 
       - uses: actions/setup-python@v5
         with:
@@ -78,12 +79,47 @@ jobs:
           cd infra
           docker compose --env-file .env up -d
           docker compose ps
-          echo "Waiting for MLflow API to be ready..."
+          echo "Waiting for MLflow UI (root) to be ready..."
           MLFLOW_PORT=$(grep -E '^MLFLOW_PORT=' .env | cut -d= -f2)
           for i in {1..90}; do
-            if curl -fsS "http://localhost:${MLFLOW_PORT}/api/2.0/mlflow/experiments/list" >/dev/null; then
-              echo "MLflow API is up!"
-              break
+            if curl -fsS "http://localhost:${MLFLOW_PORT}/" >/dev/null; then
+              echo "MLflow is up!"
+              exit 0
             fi
             sleep 2
           done
+          echo "MLflow did not become ready in time"; exit 1
+
+      - name: Smoke train (make env-host + make train)
+        run: |
+          . .venv/bin/activate
+          make env-host
+          make train
+
+      - name: Curl MLflow root (sanity)
+        run: |
+          curl -I "http://localhost:$(grep -E '^MLFLOW_PORT=' infra/.env | cut -d= -f2)/" || exit 1
+
+      - name: Collect docker status & logs (for debugging)
+        if: always()
+        run: |
+          mkdir -p ci-logs
+          cd infra
+          docker compose ps > ../ci-logs/compose-ps.txt || true
+          docker compose logs postgres > ../ci-logs/postgres.log || true
+          docker compose logs minio > ../ci-logs/minio.log || true
+          docker compose logs minio-setup > ../ci-logs/minio-setup.log || true
+          docker compose logs mlflow > ../ci-logs/mlflow.log || true
+
+      - name: Upload logs artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-logs
+          path: ci-logs
+
+      - name: Teardown infra
+        if: always()
+        run: |
+          cd infra
+          docker compose --env-file .env down -v
