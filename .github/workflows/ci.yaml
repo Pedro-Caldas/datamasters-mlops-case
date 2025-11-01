@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint-and-type:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv (fast pip/venv)
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Create venv and install tools
+        run: |
+          uv venv
+          . .venv/bin/activate
+          uv pip install ruff black mypy pre-commit
+
+      - name: Pre-commit (Black, Ruff, hygiene)
+        run: |
+          . .venv/bin/activate
+          pre-commit run --all-files
+
+      - name: Mypy
+        run: |
+          . .venv/bin/activate
+          mypy src || true
+
+  build-mlflow-image:
+    name: Build MLflow image
+    runs-on: ubuntu-latest
+    needs: [lint-and-type]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build MLflow image (Docker Compose)
+        run: |
+          cd infra
+          docker compose --env-file .env build mlflow
+
+  integration-train:
+    name: Integration (docker compose + smoke train)
+    runs-on: ubuntu-latest
+    needs: [build-mlflow-image]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv & deps
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          uv venv
+          . .venv/bin/activate
+          uv pip install -r requirements.txt
+
+      - name: Start infra (Postgres, MinIO, MLflow + bucket)
+        run: |
+          cd infra
+          docker compose --env-file .env up -d
+          # aguarda saúde dos serviços e MLflow pronto
+          echo "Waiting for MLflow to be ready..."
+          for i in {1..60}; do
+            if curl -fsS "http://localhost:$(grep -E '^MLFLOW_PORT=' .env | cut -d= -f2)/"; then
+              echo "MLflow is up!"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Smoke train (make env-host + make train)
+        run: |
+          . .venv/bin/activate
+          make env-host
+          make train
+
+      - name: Curl MLflow UI (sanity check)
+        run: |
+          curl -I "http://localhost:$(grep -E '^MLFLOW_PORT=' infra/.env | cut -d= -f2)/" || exit 1
+
+      - name: Teardown infra
+        if: always()
+        run: |
+          cd infra
+          docker compose --env-file .env down -v
