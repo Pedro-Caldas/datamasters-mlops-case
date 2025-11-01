@@ -30,3 +30,5 @@ type:
 
 test:
 \tpytest -q || true
+
+<!-- PR de teste para validar CI/CD -->
