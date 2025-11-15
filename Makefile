@@ -118,3 +118,6 @@ predict-prod:
 	export AWS_S3_ADDRESSING_STYLE=path; \
 	export AWS_EC2_METADATA_DISABLED=true; \
 	MODEL_NAME=datamasters-elasticnet PREDICT_STAGE=Production python src/predict.py
+
+data-bank:
+	python -m src.data_bank_marketing
