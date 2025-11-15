@@ -21,10 +21,10 @@ if not os.getenv("AWS_ACCESS_KEY_ID"):
 
 def main():
     if os.getenv("CI"):
-        # CI do GitHub → usar store local
+        # CI do GitHub usa store local
         mlflow.set_tracking_uri("file:./mlruns-ci")
     else:
-        # Ambiente local: usa MLFLOW_TRACKING_URI se houver
+        # Ambiente local usa MLFLOW_TRACKING_URI se houver
         tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
         if tracking_uri:
             mlflow.set_tracking_uri(tracking_uri)
