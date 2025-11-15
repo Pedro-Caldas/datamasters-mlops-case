@@ -6,6 +6,7 @@ import mlflow
 import mlflow.sklearn
 import mlflow.xgboost
 import pandas as pd
+from mlflow.models.signature import infer_signature
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, roc_auc_score
 from xgboost import XGBClassifier
@@ -67,7 +68,12 @@ def train_and_log(model_name, model, X_train, y_train, X_test, y_test, metric_na
         mlflow.log_metric(metric_name, metric_value)
 
         # Logar modelo
-        mlflow.sklearn.log_model(model, artifact_path="model")
+        signature = infer_signature(X_train, y_pred_proba)
+        mlflow.sklearn.log_model(
+            model,
+            artifact_path="model",
+            signature=signature,
+        )
 
         return {
             "model_name": model_name,
@@ -100,6 +106,7 @@ def main():
             colsample_bytree=1.0,
             eval_metric="logloss",
             n_jobs=2,
+            scale_pos_weight=8,
         ),
     }
 

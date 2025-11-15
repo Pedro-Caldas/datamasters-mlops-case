@@ -65,7 +65,7 @@ train-bank:
 		export AWS_S3_ADDRESSING_STYLE=path; \
 		export AWS_EC2_METADATA_DISABLED=true; \
 	else \
-		echo "⚠️  infra/.env NÃO encontrado (modo CI)"; \
+		echo "infra/.env NÃO encontrado (modo CI)"; \
 	fi; \
 	MODEL_NAME=$${MODEL_NAME:-bank-model} METRIC=$${METRIC:-roc_auc} python -m src.train_bank_marketing
 
@@ -80,21 +80,44 @@ predict:
 	export AWS_EC2_METADATA_DISABLED=true; \
 	STAGE=$${STAGE:-Production} MODEL_NAME=$${MODEL_NAME:-datamasters-model} python src/predict.py
 
+predict-bank:
+	@set -a; . infra/.env; set +a; \
+	export AWS_ACCESS_KEY_ID=$$S3_ACCESS_KEY; \
+	export AWS_SECRET_ACCESS_KEY=$$S3_SECRET_KEY; \
+	export AWS_DEFAULT_REGION=$$S3_REGION; \
+	export MLFLOW_S3_ENDPOINT_URL=$$S3_ENDPOINT_EXTERNAL; \
+	export AWS_S3_ADDRESSING_STYLE=path; \
+	export AWS_EC2_METADATA_DISABLED=true; \
+	MODEL_NAME=$${MODEL_NAME:-bank-model} \
+	PREDICT_STAGE=$${STAGE:-Production} \
+	python -m src.predict_bank
+
 # Model Registry
 # Exemplo:
 #   make promote VERSION=3 STAGE=Production MODEL_NAME=bank-model
 
 list-models:
-	python -c 'from mlflow.tracking import MlflowClient; c=MlflowClient(); \
+	@if [ -f infra/.env ]; then \
+		set -a; . infra/.env; set +a; \
+	fi; \
+	python -c 'from mlflow.tracking import MlflowClient; \
+	c=MlflowClient(); \
 	[print("-", m.name) for m in c.search_registered_models()]'
 
 list-versions:
+	@if [ -f infra/.env ]; then \
+		set -a; . infra/.env; set +a; \
+	fi; \
 	python -c 'import os; from mlflow.tracking import MlflowClient; \
 	name=os.getenv("MODEL_NAME","datamasters-model"); \
-	c=MlflowClient(); vs=c.search_model_versions(f"name=\"{name}\""); \
+	c=MlflowClient(); \
+	vs=c.search_model_versions(f"name=\"{name}\""); \
 	[print(f"{v.name} v{v.version} - stage={v.current_stage}") for v in vs]'
 
 promote:
+	@if [ -f infra/.env ]; then \
+		set -a; . infra/.env; set +a; \
+	fi; \
 	python -c 'import os; from mlflow.tracking import MlflowClient; \
 	name=os.getenv("MODEL_NAME","datamasters-model"); \
 	ver=os.getenv("VERSION"); stage=os.getenv("STAGE","Staging"); \
