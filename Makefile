@@ -31,10 +31,18 @@ logs:
 	cd infra && docker compose logs -f
 
 open-mlflow:
-	open http://localhost:$(MLFLOW_PORT)
+	@if [ -f infra/.env ]; then \
+		echo "Carregando infra/.env..."; \
+		set -a; . infra/.env; set +a; \
+	fi; \
+	open "http://localhost:$${MLFLOW_PORT}"
 
 open-minio:
-	open http://localhost:9001
+	@if [ -f infra/.env ]; then \
+		echo "Carregando infra/.env..."; \
+		set -a; . infra/.env; set +a; \
+	fi; \
+	open "http://localhost:$${MINIO_PORT_UI}"
 
 # Pipeline de MLOps
 # --
@@ -45,6 +53,22 @@ open-minio:
 train:
 	@set -a; . infra/.env; set +a; \
 	MODEL_NAME=$${MODEL_NAME:-datamasters-model} python src/train_baseline.py
+
+train-bank:
+	@if [ -f infra/.env ]; then \
+		echo "Carregando infra/.env..."; \
+		set -a; . infra/.env; set +a; \
+		export AWS_ACCESS_KEY_ID=$$S3_ACCESS_KEY; \
+		export AWS_SECRET_ACCESS_KEY=$$S3_SECRET_KEY; \
+		export AWS_DEFAULT_REGION=$$S3_REGION; \
+		export MLFLOW_S3_ENDPOINT_URL=$$S3_ENDPOINT_EXTERNAL; \
+		export AWS_S3_ADDRESSING_STYLE=path; \
+		export AWS_EC2_METADATA_DISABLED=true; \
+	else \
+		echo "⚠️  infra/.env NÃO encontrado (modo CI)"; \
+	fi; \
+	MODEL_NAME=$${MODEL_NAME:-bank-model} METRIC=$${METRIC:-roc_auc} python -m src.train_bank_marketing
+
 
 predict:
 	@set -a; . infra/.env; set +a; \
