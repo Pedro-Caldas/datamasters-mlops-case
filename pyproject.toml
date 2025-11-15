@@ -3,7 +3,6 @@ name = "datamasters-mlops-case"
 version = "0.1.0"
 requires-python = ">=3.11"
 
-# Dependências normais
 dependencies = [
     "mlflow==2.16.0",
     "scikit-learn==1.5.2",
@@ -11,16 +10,12 @@ dependencies = [
     "boto3==1.35.0",
 ]
 
-# Dependências de desenvolvimento
-optional-dependencies = {
-    dev = [
-        "black",
-        "ruff",
-        "pytest",
-    ],
-}
-
-# Ferramentas
+[project.optional-dependencies]
+dev = [
+    "black",
+    "ruff",
+    "pytest",
+]
 
 [tool.black]
 line-length = 100
