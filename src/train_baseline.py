@@ -20,13 +20,16 @@ if not os.getenv("AWS_ACCESS_KEY_ID"):
 
 
 def main():
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
-
-    if tracking_uri:
-        mlflow.set_tracking_uri(tracking_uri)
-    else:
-        # Tracking local pra rodar o CI sem server do MLflow
+    if os.getenv("CI"):
+        # CI do GitHub → usar store local
         mlflow.set_tracking_uri("file:./mlruns-ci")
+    else:
+        # Ambiente local: usa MLFLOW_TRACKING_URI se houver
+        tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+        else:
+            mlflow.set_tracking_uri("http://localhost:5050")
 
     mlflow.set_experiment("baseline")
 
