@@ -20,7 +20,14 @@ if not os.getenv("AWS_ACCESS_KEY_ID"):
 
 
 def main():
-    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5050"))
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+    else:
+        # Tracking local pra rodar o CI sem server do MLflow
+        mlflow.set_tracking_uri("file:./mlruns-ci")
+
     mlflow.set_experiment("baseline")
 
     model_name = os.getenv("MODEL_NAME", "datamasters-elasticnet")
