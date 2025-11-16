@@ -4,16 +4,15 @@ import pathlib
 
 import mlflow
 import mlflow.sklearn
-import mlflow.xgboost
 import pandas as pd
 import psycopg2
 from mlflow.models.signature import infer_signature
+from psycopg2.extras import Json
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, roc_auc_score
-from xgboost import XGBClassifier
 
-#  CONFIG DO MLflow
-
+# Configuração do MLflow
 if os.getenv("CI"):
     mlflow.set_tracking_uri("file:./mlruns-ci")
 else:
@@ -25,8 +24,7 @@ else:
 
 mlflow.set_experiment("bank-marketing")
 
-#  PATH DOS DADOS
-
+# Caminho dos dados
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
 
@@ -39,18 +37,14 @@ def load_data():
     return X_train, X_test, y_train, y_test
 
 
-#  MÉTRICA PARAMETRIZÁVEL
-
-
+# Métrica
 def compute_metric(y_true, y_pred, metric_name):
     if metric_name == "f1":
         return f1_score(y_true, (y_pred > 0.5).astype(int))
-    return roc_auc_score(y_true, y_pred)  # default
+    return roc_auc_score(y_true, y_pred)
 
 
-#  TREINO E LOG NO MLFLOW
-
-
+# Treina e loga no MLflow
 def train_and_log(model_name, model, X_train, y_train, X_test, y_test, metric_name):
     with mlflow.start_run(run_name=model_name):
         model.fit(X_train, y_train)
@@ -62,11 +56,7 @@ def train_and_log(model_name, model, X_train, y_train, X_test, y_test, metric_na
         mlflow.log_metric(metric_name, metric_value)
 
         signature = infer_signature(X_train, y_pred_proba)
-        mlflow.sklearn.log_model(
-            model,
-            artifact_path="model",
-            signature=signature,
-        )
+        mlflow.sklearn.log_model(model, artifact_path="model", signature=signature)
 
         return {
             "model_name": model_name,
@@ -75,43 +65,45 @@ def train_and_log(model_name, model, X_train, y_train, X_test, y_test, metric_na
         }
 
 
-#  SALVAR METADADOS DO TREINO NO POSTGRES
-
-
-def log_training_metadata_to_db(X_train):
+# Persistência no Postgres
+def log_training_metadata_to_db(X_train, y_train, run_id, model_version):
     host = os.getenv("POSTGRES_HOST", "localhost")
     user = os.getenv("POSTGRES_USER")
     pwd = os.getenv("POSTGRES_PASSWORD")
     db = os.getenv("POSTGRES_DB")
     port = os.getenv("POSTGRES_PORT", "5432")
 
-    conn = psycopg2.connect(
-        host=host,
-        user=user,
-        password=pwd,
-        dbname=db,
-        port=port,
-    )
+    try:
+        conn = psycopg2.connect(host=host, user=user, password=pwd, dbname=db, port=port)
+        cur = conn.cursor()
 
-    rows, cols = X_train.shape
+        features_json = X_train.to_dict(orient="records")
+        target_json = y_train.tolist()
 
-    with conn.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO training_data (source, rows, cols)
-            VALUES (%s, %s, %s);
+            INSERT INTO training_data (
+                run_id,
+                model_version,
+                features,
+                target
+            )
+            VALUES (%s, %s, %s, %s)
             """,
-            ("bank-marketing", rows, cols),
+            (run_id, str(model_version), Json(features_json), Json(target_json)),
         )
-    conn.commit()
-    conn.close()
 
-    print(f"Dados de treino registrados no banco: {rows} linhas, {cols} colunas.")
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        print("Dados de treino persistidos no Postgres.")
+
+    except Exception as e:
+        print("Erro ao salvar dados de treino no Postgres:", e)
 
 
-#  PIPELINE PRINCIPAL
-
-
+# Pipeline principal
 def main():
     metric_name = os.getenv("METRIC", "roc_auc")
     model_registry_name = os.getenv("MODEL_NAME", "bank-model")
@@ -123,20 +115,15 @@ def main():
 
     models = {
         "log_reg": LogisticRegression(max_iter=500),
-        "xgb": XGBClassifier(
+        "rf": RandomForestClassifier(
             n_estimators=200,
-            learning_rate=0.1,
-            max_depth=4,
-            subsample=1.0,
-            colsample_bytree=1.0,
-            eval_metric="logloss",
-            n_jobs=2,
-            scale_pos_weight=8,
+            max_depth=10,
+            random_state=42,
+            n_jobs=-1,
         ),
     }
 
     results = []
-
     for name, model in models.items():
         print(f"\nTreinando modelo: {name}")
         res = train_and_log(name, model, X_train, y_train, X_test, y_test, metric_name)
@@ -145,11 +132,14 @@ def main():
     best = max(results, key=lambda r: r["metric"])
     print("\nMelhor modelo:", best)
 
+    # Registra apenas UMA versão
     model_uri = f"runs:/{best['run_id']}/model"
-    mlflow.register_model(model_uri, model_registry_name)
+    registered = mlflow.register_model(model_uri, model_registry_name)
+    version_number = registered.version
 
-    # SALVAR METADADOS DO TREINAMENTO NO POSTGRES
-    log_training_metadata_to_db(X_train)
+    log_training_metadata_to_db(
+        X_train, y_train, run_id=best["run_id"], model_version=version_number
+    )
 
     print("\nModelo registrado no MLflow:")
     print(json.dumps(best, indent=2))
