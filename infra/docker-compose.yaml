@@ -18,6 +18,39 @@ services:
       timeout: 3s
       retries: 20
 
+  postgres-migrate:
+    image: postgres:16
+    container_name: postgres-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: >
+      sh -c "
+        echo '📌 Iniciando migração do Postgres...' &&
+        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c \"
+          CREATE TABLE IF NOT EXISTS training_data (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMP DEFAULT NOW(),
+            source VARCHAR(50),
+            rows INT,
+            cols INT
+          );
+        \" &&
+        psql -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c \"
+          CREATE TABLE IF NOT EXISTS inference_logs (
+            id SERIAL PRIMARY KEY,
+            ts TIMESTAMP DEFAULT NOW(),
+            model_name VARCHAR(100),
+            model_version VARCHAR(50),
+            input_shape VARCHAR(50),
+            prediction JSONB
+          );
+        \" &&
+        echo 'Migração concluída com sucesso!'
+      "
+
   minio:
     image: minio/minio:latest
     container_name: minio
@@ -60,6 +93,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-migrate:
+        condition: service_completed_successfully
       minio:
         condition: service_healthy
       minio-setup:
@@ -77,6 +112,17 @@ services:
       --default-artifact-root s3://${S3_BUCKET}/
     ports:
       - "${MLFLOW_PORT}:5000"
+
+  postgres-init:
+    image: postgres:16-alpine
+    container_name: postgres-init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./infra/postgres_init.sql:/docker-entrypoint-initdb.d/postgres_init.sql
+    entrypoint: ["true"]
+
 
 volumes:
   pg_data:

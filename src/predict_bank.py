@@ -6,6 +6,8 @@ import mlflow
 import pandas as pd
 from mlflow.tracking import MlflowClient
 
+from db import save_inference_row
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
 
@@ -22,31 +24,36 @@ def load_production_model(model_name, stage="Production"):
     versions = client.get_latest_versions(model_name, stages=[stage])
 
     if not versions:
-        raise ValueError(f"No versions found for model {model_name} in stage {stage}")
+        raise ValueError(f"No versions for model {model_name} in stage {stage}")
 
-    version = versions[0]  # the latest version in Production
-
+    version = versions[0]
     run_id = version.run_id
     model_uri = f"runs:/{run_id}/model"
 
-    # Carregar modelo sklearn diretamente (sem PyFunc wrapper)
     model = mlflow.sklearn.load_model(model_uri)
-
-    return model, model_uri
+    return model, run_id, model_uri
 
 
 def main():
     df = load_input()
 
     model_name = os.getenv("MODEL_NAME", "bank-model")
-    model, model_uri = load_production_model(model_name)
+    model, run_id, model_uri = load_production_model(model_name)
 
-    # Probabilidade sempre disponível em sklearn/XGBClassifier
     if hasattr(model, "predict_proba"):
         proba = model.predict_proba(df)[:, 1]
     else:
-        pred = model.predict(df)
-        proba = pred.astype(float)
+        preds = model.predict(df)
+        proba = preds.astype(float)
+
+    # Persistir inferências
+    for i in range(len(df)):
+        save_inference_row(
+            run_id=run_id,
+            model_version="production",
+            features=df.iloc[i].to_dict(),
+            prediction=float(proba[i]),
+        )
 
     print(
         json.dumps(
