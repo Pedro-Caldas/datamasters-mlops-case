@@ -92,6 +92,18 @@ predict-bank:
 	PREDICT_STAGE=$${STAGE:-Production} \
 	python -m src.predict_bank
 
+serve-bank:
+	set -a
+	. infra/.env
+	set +a
+	AWS_ACCESS_KEY_ID=$(S3_ACCESS_KEY) \
+	AWS_SECRET_ACCESS_KEY=$(S3_SECRET_KEY) \
+	AWS_DEFAULT_REGION=$(S3_REGION) \
+	MLFLOW_S3_ENDPOINT_URL=$(S3_ENDPOINT_EXTERNAL) \
+	AWS_S3_ADDRESSING_STYLE=path \
+	AWS_EC2_METADATA_DISABLED=true \
+	python src/serve_bank.py
+
 # Model Registry
 # Exemplo:
 #   make promote VERSION=3 STAGE=Production MODEL_NAME=bank-model
