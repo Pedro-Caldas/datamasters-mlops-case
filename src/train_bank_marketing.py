@@ -1,16 +1,24 @@
 import json
 import os
 import pathlib
+import warnings
 
 import mlflow
 import mlflow.sklearn
 import pandas as pd
 import psycopg2
 from mlflow.models.signature import infer_signature
-from psycopg2.extras import Json
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score, roc_auc_score
+
+# Limpar warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Configuração do MLflow
 if os.getenv("CI"):
@@ -37,14 +45,12 @@ def load_data():
     return X_train, X_test, y_train, y_test
 
 
-# Métrica
 def compute_metric(y_true, y_pred, metric_name):
     if metric_name == "f1":
         return f1_score(y_true, (y_pred > 0.5).astype(int))
     return roc_auc_score(y_true, y_pred)
 
 
-# Treina e loga no MLflow
 def train_and_log(model_name, model, X_train, y_train, X_test, y_test, metric_name):
     with mlflow.start_run(run_name=model_name):
         model.fit(X_train, y_train)
@@ -65,42 +71,74 @@ def train_and_log(model_name, model, X_train, y_train, X_test, y_test, metric_na
         }
 
 
-# Persistência no Postgres
-def log_training_metadata_to_db(X_train, y_train, run_id, model_version):
+# Persistência no Postgres — agora com feature_stats
+def log_training_metadata_to_db(
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    run_id,
+    model_version,
+    metric_name,
+    metric_value,
+):
     host = os.getenv("POSTGRES_HOST", "localhost")
     user = os.getenv("POSTGRES_USER")
     pwd = os.getenv("POSTGRES_PASSWORD")
     db = os.getenv("POSTGRES_DB")
     port = os.getenv("POSTGRES_PORT", "5432")
 
-    try:
-        conn = psycopg2.connect(host=host, user=user, password=pwd, dbname=db, port=port)
-        cur = conn.cursor()
+    n_train = len(X_train)
+    n_test = len(X_test)
+    n_features = X_train.shape[1]
 
-        features_json = X_train.to_dict(orient="records")
-        target_json = y_train.tolist()
+    # Estatísticas de drift — super simples e super úteis
+    feature_stats = X_train.describe().to_dict()
+
+    try:
+        conn = psycopg2.connect(
+            host=host,
+            user=user,
+            password=pwd,
+            dbname=db,
+            port=port,
+        )
+        cur = conn.cursor()
 
         cur.execute(
             """
             INSERT INTO training_data (
                 run_id,
                 model_version,
-                features,
-                target
+                metric_name,
+                metric_value,
+                n_train,
+                n_test,
+                n_features,
+                feature_stats
             )
-            VALUES (%s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
             """,
-            (run_id, str(model_version), Json(features_json), Json(target_json)),
+            (
+                run_id,
+                str(model_version),
+                metric_name,
+                float(metric_value),
+                int(n_train),
+                int(n_test),
+                int(n_features),
+                json.dumps(feature_stats),
+            ),
         )
 
         conn.commit()
         cur.close()
         conn.close()
 
-        print("Dados de treino persistidos no Postgres.")
+        print("Metadados + feature_stats persistidos no Postgres.")
 
     except Exception as e:
-        print("Erro ao salvar dados de treino no Postgres:", e)
+        print("Erro ao salvar metadados de treino no Postgres:", e)
 
 
 # Pipeline principal
@@ -132,13 +170,21 @@ def main():
     best = max(results, key=lambda r: r["metric"])
     print("\nMelhor modelo:", best)
 
-    # Registra apenas UMA versão
+    # Registra apenas 1 versão
     model_uri = f"runs:/{best['run_id']}/model"
     registered = mlflow.register_model(model_uri, model_registry_name)
     version_number = registered.version
 
+    # Salva metadados + feature_stats
     log_training_metadata_to_db(
-        X_train, y_train, run_id=best["run_id"], model_version=version_number
+        X_train=X_train,
+        X_test=X_test,
+        y_train=y_train,
+        y_test=y_test,
+        run_id=best["run_id"],
+        model_version=version_number,
+        metric_name=metric_name,
+        metric_value=best["metric"],
     )
 
     print("\nModelo registrado no MLflow:")

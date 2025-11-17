@@ -34,8 +34,12 @@ services:
               id SERIAL PRIMARY KEY,
               run_id TEXT,
               model_version TEXT,
-              features JSONB,
-              target JSONB,
+              metric_name TEXT,
+              metric_value DOUBLE PRECISION,
+              n_train INTEGER,
+              n_test INTEGER,
+              n_features INTEGER,
+              feature_stats JSONB,
               timestamp TIMESTAMP DEFAULT NOW()
           );
         ' &&
