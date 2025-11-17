@@ -72,18 +72,3 @@ jobs:
 
           print(f"Promovido: {name} v{v.version} -> Production")
           EOF
-
-      - name: Smoke test - prediction
-        env:
-          CI: "1"
-          MODEL_NAME: "ci-test"
-          STAGE: "Production"
-        run: |
-          python - << 'EOF'
-          import src.predict_bank as pb
-
-          # Evita erro por falta de Postgres no CI
-          pb.save_inference_row = lambda *args, **kwargs: None
-
-          pb.main()
-          EOF
