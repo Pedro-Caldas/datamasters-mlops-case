@@ -11,32 +11,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout do repositório
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Configura Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Instala dependências
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      # Copia as envs mock
       - name: Create .env from example
         run: |
           cp infra/.env.example infra/.env
 
-      # Checa qualidade
       - name: Run code quality checks
         run: |
-          make format
           make lint
+
+      - name: Run unit tests
+        run: |
+          make test
+
+      # 🔥 Nova etapa necessária
+      - name: Generate processed dataset
+        run: |
+          make data-bank
 
       - name: Smoke test - training
         env:
@@ -74,12 +77,14 @@ jobs:
                   - name: Smoke test - prediction
                     env:
                       CI: "1"
+                      MODEL_NAME: "ci-test"
+                      STAGE: "Production"
                     run: |
                       python - << 'EOF'
             import src.predict_bank as pb
 
-            # Monkeypatch save_inference_row para evitar Postgres
+            # Evita erro por falta de Postgres no CI
             pb.save_inference_row = lambda *args, **kwargs: None
 
             pb.main()
-            EOF
+          EOF
