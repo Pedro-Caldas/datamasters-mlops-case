@@ -5,8 +5,15 @@ import psycopg2
 
 
 def get_conn():
+    """
+    Conecta tanto localmente quanto dentro do Docker.
+    """
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    if host == "localhost" and os.getenv("RUNNING_IN_DOCKER") == "1":
+        host = "postgres"
+
     return psycopg2.connect(
-        host=os.getenv("POSTGRES_HOST", "localhost"),
+        host=host,
         port=os.getenv("POSTGRES_PORT", "5432"),
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
@@ -20,9 +27,9 @@ def save_training_row(run_id, model_version, features: dict, target: int):
     cur.execute(
         """
         INSERT INTO training_data (run_id, model_version, features, target)
-        VALUES (%s, %s, %s::jsonb, %s)
+        VALUES (%s, %s, %s::jsonb, %s::jsonb)
         """,
-        (run_id, model_version, json.dumps(features), target),
+        (run_id, model_version, json.dumps(features), json.dumps(target)),
     )
     conn.commit()
     cur.close()

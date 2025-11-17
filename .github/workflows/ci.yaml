@@ -11,34 +11,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout do repositório
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Configura Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Instala dependências
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      # Copia as envs mock
       - name: Create .env from example
         run: |
           cp infra/.env.example infra/.env
 
-      # Checa qualidade
       - name: Run code quality checks
         run: |
-          make format
           make lint
 
-      # Smoke test do pipeline
-      - name: Smoke test - training
+      - name: Run unit tests
         run: |
-          make train MODEL_NAME=ci-test
+          make test
+
+      - name: Generate processed dataset
+        run: |
+          make data-bank
+
+      - name: Smoke test - training
+        env:
+          CI: "1"
+        run: |
+          make train-bank MODEL_NAME=ci-test
+
+      - name: Promote model to Production (local registry)
+        env:
+          CI: "1"
+        run: |
+          python - << 'EOF'
+          from mlflow.tracking import MlflowClient
+
+          client = MlflowClient(tracking_uri="file:./mlruns-ci")
+
+          name = "ci-test"
+          versions = client.search_model_versions(f"name='{name}'")
+
+          if not versions:
+              raise RuntimeError("Nenhuma versão foi registrada durante o treino.")
+
+          v = sorted(versions, key=lambda x: int(x.version))[-1]
+
+          client.transition_model_version_stage(
+              name=name,
+              version=v.version,
+              stage="Production",
+              archive_existing_versions=True
+          )
+
+          print(f"Promovido: {name} v{v.version} -> Production")
+          EOF

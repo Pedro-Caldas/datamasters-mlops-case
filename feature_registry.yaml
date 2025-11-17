@@ -1,0 +1,103 @@
+version: 1
+dataset: bank-marketing
+n_features: 42
+
+description: >
+  Registro simples das features usadas no case Bank Marketing.
+  O objetivo é documentar quais colunas entram no modelo,
+  seu tipo e de onde vêm, funcionando como uma "mini feature store" offline.
+
+target:
+  name: y
+  type: binary
+  values:
+    - 0
+    - 1
+  description: Cliente assinou (1) ou não (0) um depósito a prazo.
+
+features:
+  numeric:
+    description: Colunas numéricas originais do dataset.
+    columns:
+      - age        # idade do cliente (anos)
+      - balance    # saldo médio anual em euros
+      - day        # dia do mês do último contato
+      - duration   # duração do último contato (segundos)
+      - campaign   # nº de contatos realizados durante esta campanha
+      - pdays      # dias desde o último contato anterior (999 = nunca contatado)
+      - previous   # nº de contatos realizados antes desta campanha
+
+  binary_flags:
+    description: Flags binárias derivadas diretamente de colunas categóricas.
+    columns:
+      - default_yes   # cliente possui crédito em default?
+      - housing_yes   # cliente possui empréstimo habitacional?
+      - loan_yes      # cliente possui empréstimo pessoal?
+
+  categorical_one_hot:
+    description: >
+      Colunas categóricas do CSV original transformadas em one-hot encoding
+      via pandas.get_dummies(drop_first=True). Cada coluna abaixo é uma dummy
+      booleana indicando a presença daquela categoria específica.
+    groups:
+
+      job:
+        original_column: job
+        columns:
+          - job_blue-collar
+          - job_entrepreneur
+          - job_housemaid
+          - job_management
+          - job_retired
+          - job_self-employed
+          - job_services
+          - job_student
+          - job_technician
+          - job_unemployed
+          - job_unknown
+
+      marital:
+        original_column: marital
+        columns:
+          - marital_married
+          - marital_single
+
+      education:
+        original_column: education
+        columns:
+          - education_secondary
+          - education_tertiary
+          - education_unknown
+
+      contact:
+        original_column: contact
+        columns:
+          - contact_telephone
+          - contact_unknown
+
+      month:
+        original_column: month
+        columns:
+          - month_aug
+          - month_dec
+          - month_feb
+          - month_jan
+          - month_jul
+          - month_jun
+          - month_mar
+          - month_may
+          - month_nov
+          - month_oct
+          - month_sep
+
+      poutcome:
+        original_column: poutcome
+        columns:
+          - poutcome_other
+          - poutcome_success
+          - poutcome_unknown
+
+notes:
+  - "As 42 colunas usadas no modelo são exatamente as produzidas por src.data_bank_marketing."
+  - "O schema e estatísticas das features numéricas são versionados por run/modelo na tabela training_data (feature_stats)."
+  - "O servidor de inferência (serve_bank) assume este mesmo espaço vetorial, garantindo consistência treino/serving."

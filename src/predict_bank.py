@@ -7,7 +7,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from mlflow.tracking import MlflowClient
 
-from db import save_inference_row
+from src.db import save_inference_row
 
 # Carregar variáveis de ambiente
 ROOT = pathlib.Path(__file__).resolve().parents[1]

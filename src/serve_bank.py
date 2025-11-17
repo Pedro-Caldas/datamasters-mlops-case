@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from mlflow.tracking import MlflowClient
 from pydantic import BaseModel
 
-from db import save_inference_row
+from src.db import save_inference_row
 
 # Carregar envs
 load_dotenv("infra/.env")
@@ -126,7 +126,6 @@ def predict(payload: PredictRequest):
     }
 
 
-# Execução direta
 if __name__ == "__main__":
     import uvicorn
 
