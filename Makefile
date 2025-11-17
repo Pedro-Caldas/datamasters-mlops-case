@@ -1,10 +1,12 @@
 # Makefile do projeto Datamasters
 # Focado no case Bank Marketing
-# Criado para facilitar a vida do avaliador (você mesmo que está lendo :D)!
+# Criado para facilitar a vida do avaliador!
 
 .PHONY: format lint test ensure-dotenv up down logs open-mlflow open-minio \
-        train-bank predict-bank serve-bank list-models list-versions promote \
-        data-bank db-training db-inference
+        train-bank predict-bank serve-bank \
+        list-models list-versions promote \
+        data-bank db-training db-training-full db-training-pretty db-inference \
+        monitor-bank
 
 # --------------------------------------------------------------------
 # Qualidade de código
@@ -27,8 +29,9 @@ test:
 ensure-dotenv:
 	@test -f infra/.env || (cp infra/.env.example infra/.env && echo "infra/.env criado.")
 
+# make up: só infra :)
 up: ensure-dotenv
-	cd infra && docker compose --env-file .env up -d
+	cd infra && docker compose --env-file .env up -d postgres postgres-migrate minio minio-setup mlflow
 
 down:
 	cd infra && docker compose --env-file .env down -v
@@ -52,12 +55,6 @@ open-minio:
 
 # --------------------------------------------------------------------
 # Pipeline de MLOps - Bank Marketing
-# --------------------------------------------------------------------
-# Exemplos:
-#   make data-bank
-#   make train-bank METRIC=roc_auc MODEL_NAME=bank-model
-#   make serve-bank
-#   make predict-bank STAGE=Production MODEL_NAME=bank-model
 # --------------------------------------------------------------------
 
 data-bank:
@@ -97,6 +94,7 @@ predict-bank:
 	PREDICT_STAGE=$${STAGE:-Production} \
 	python -m src.predict_bank
 
+# Serviço local de inferência via FastAPI
 serve-bank:
 	@if [ -f infra/.env ]; then \
 		echo "Carregando infra/.env..."; \
@@ -115,47 +113,39 @@ serve-bank:
 # --------------------------------------------------------------------
 # Model Registry (MLflow)
 # --------------------------------------------------------------------
-# Exemplos:
-#   make list-models
-#   make list-versions MODEL_NAME=bank-model
-#   make promote MODEL_NAME=bank-model VERSION=3 STAGE=Production
-# --------------------------------------------------------------------
 
 list-models:
 	@if [ -f infra/.env ]; then \
 		set -a; . infra/.env; set +a; \
 	fi; \
 	python -c 'from mlflow.tracking import MlflowClient; \
-c=MlflowClient(); \
-[print("-", m.name) for m in c.search_registered_models()]'
+	c=MlflowClient(); \
+	[print("-", m.name) for m in c.search_registered_models()]'
 
 list-versions:
 	@if [ -f infra/.env ]; then \
 		set -a; . infra/.env; set +a; \
 	fi; \
 	python -c 'import os; from mlflow.tracking import MlflowClient; \
-name=os.getenv("MODEL_NAME","bank-model"); \
-c=MlflowClient(); \
-vs=c.search_model_versions(f"name=\"{name}\""); \
-[print(f"{v.name} v{v.version} - stage={v.current_stage}") for v in vs]'
+	name=os.getenv("MODEL_NAME","bank-model"); \
+	c=MlflowClient(); \
+	vs=c.search_model_versions(f"name=\"{name}\""); \
+	[print(f"{v.name} v{v.version} - stage={v.current_stage}") for v in vs]'
 
 promote:
 	@if [ -f infra/.env ]; then \
 		set -a; . infra/.env; set +a; \
 	fi; \
 	python -c 'import os; from mlflow.tracking import MlflowClient; \
-name=os.getenv("MODEL_NAME","bank-model"); \
-ver=os.getenv("VERSION"); stage=os.getenv("STAGE","Staging"); \
-assert ver, "Set VERSION=<n>"; \
-c=MlflowClient(); \
-c.transition_model_version_stage(name=name, version=str(ver), stage=stage, archive_existing_versions=True); \
-print(f"Promoted {name} v{ver} -> {stage}")'
+	name=os.getenv("MODEL_NAME","bank-model"); \
+	ver=os.getenv("VERSION"); stage=os.getenv("STAGE","Staging"); \
+	assert ver, "Set VERSION=<n>"; \
+	c=MlflowClient(); \
+	c.transition_model_version_stage(name=name, version=str(ver), stage=stage, archive_existing_versions=True); \
+	print(f"Promoted {name} v{ver} -> {stage}")'
 
 # --------------------------------------------------------------------
 # Inspeção rápida das tabelas do Postgres
-# --------------------------------------------------------------------
-#   make db-training   -> últimas linhas de metadados de treino
-#   make db-inference  -> últimas linhas de logs de inferência
 # --------------------------------------------------------------------
 
 db-training:
@@ -163,40 +153,52 @@ db-training:
 		echo "Carregando infra/.env..."; \
 		set -a; . infra/.env; set +a; \
 		cd infra && docker compose --env-file .env exec -T postgres \
-			psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
-			-c "SELECT id, run_id, model_version, metric_name, metric_value, n_train, n_test, n_features, timestamp FROM training_data ORDER BY id DESC LIMIT 5;"; \
+		  psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
+		  -c "SELECT id, run_id, model_version, metric_name, metric_value, n_train, n_test, n_features, timestamp FROM training_data ORDER BY id DESC LIMIT 5;"; \
 	else \
-		echo "infra/.env NÃO encontrado. Suba a infra primeiro com 'make up'."; \
+		echo "infra/.env NÃO encontrado."; \
 	fi
 
 db-training-full:
 	@if [ -f infra/.env ]; then \
-		echo "Carregando infra/.env..."; \
 		set -a; . infra/.env; set +a; \
 		cd infra && docker compose --env-file .env exec -T postgres \
-			psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
-			-c "SELECT * FROM training_data ORDER BY id DESC LIMIT 1;"; \
-	else \
-		echo "infra/.env NÃO encontrado. Suba a infra primeiro com 'make up'."; \
+		  psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
+		  -c "SELECT * FROM training_data ORDER BY id DESC LIMIT 1;"; \
 	fi
 
 db-training-pretty:
 	@if [ -f infra/.env ]; then \
 		set -a; . infra/.env; set +a; \
 		cd infra && docker compose --env-file .env exec -T postgres \
-			psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
-			-c "SELECT jsonb_pretty(feature_stats) FROM training_data ORDER BY id DESC LIMIT 1;"; \
-	else \
-		echo "infra/.env NÃO encontrado."; \
+		  psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
+		  -c "SELECT jsonb_pretty(feature_stats) FROM training_data ORDER BY id DESC LIMIT 1;"; \
 	fi
 
 db-inference:
 	@if [ -f infra/.env ]; then \
-		echo "Carregando infra/.env..."; \
 		set -a; . infra/.env; set +a; \
 		cd infra && docker compose --env-file .env exec -T postgres \
-			psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
-			-c "SELECT id, run_id, model_version, prediction, timestamp FROM inference_logs ORDER BY id DESC LIMIT 10;"; \
-	else \
-		echo "infra/.env NÃO encontrado. Suba a infra primeiro com 'make up'."; \
+		  psql -U $$POSTGRES_USER -d $$POSTGRES_DB \
+		  -c "SELECT id, run_id, model_version, prediction, timestamp FROM inference_logs ORDER BY id DESC LIMIT 10;"; \
 	fi
+
+# --------------------------------------------------------------------
+# Monitoramento simples de drift
+# --------------------------------------------------------------------
+
+monitor-bank:
+	python -m src.monitor_bank
+
+# --------------------------------------------------------------------
+# Testes
+# --------------------------------------------------------------------
+
+test:
+	pytest -q
+
+coverage:
+	coverage run -m pytest -q
+	coverage report -m
+	coverage html
+	@echo "📊 Abra o relatório em: htmlcov/index.html"

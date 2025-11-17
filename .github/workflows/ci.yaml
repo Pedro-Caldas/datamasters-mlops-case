@@ -38,7 +38,48 @@ jobs:
           make format
           make lint
 
-      # Smoke test do pipeline
       - name: Smoke test - training
+        env:
+          CI: "1"
         run: |
-          make train MODEL_NAME=ci-test
+          make train-bank MODEL_NAME=ci-test
+
+      - name: Promote model to Production (local registry)
+        env:
+          CI: "1"
+        run: |
+          python - << 'EOF'
+            from mlflow.tracking import MlflowClient
+
+            client = MlflowClient(tracking_uri="file:./mlruns-ci")
+
+            name = "ci-test"
+            versions = client.search_model_versions(f"name='{name}'")
+
+            if not versions:
+                raise RuntimeError("Nenhuma versão foi registrada durante o treino.")
+
+            v = sorted(versions, key=lambda x: int(x.version))[-1]
+
+            client.transition_model_version_stage(
+                name=name,
+                version=v.version,
+                stage="Production",
+                archive_existing_versions=True
+            )
+
+            print(f"Promovido: {name} v{v.version} -> Production")
+            EOF
+
+                  - name: Smoke test - prediction
+                    env:
+                      CI: "1"
+                    run: |
+                      python - << 'EOF'
+            import src.predict_bank as pb
+
+            # Monkeypatch save_inference_row para evitar Postgres
+            pb.save_inference_row = lambda *args, **kwargs: None
+
+            pb.main()
+            EOF
