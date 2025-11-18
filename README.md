@@ -36,7 +36,9 @@ Nas próximas seções você vai encontrar a arquitetura adotada, as decisões t
 
 Há no projeto um arquivo Makefile com diversos comandos criados para facilitar a interação. Vamos usá-los como guia para a execução do projeto.
 
-<span style="font-size: 0.9em;"> **PS**: Por default, o código atribuirá a um modelo treinado o nome 'bank-model' caso o usuário não atribua um específico. Portanto usaremos esse mesmo nome como exemplo no decorrer do guia. </span> 
+<span style="font-size: 0.9em;"> **PS**: Para rodar o projeto, é necessário ter o **Docker** instalado na máquina </span> 
+
+<span style="font-size: 0.9em;"> **PS2**: Por default, o código atribuirá a um modelo treinado o nome 'bank-model' caso o usuário não atribua um específico. Portanto usaremos esse mesmo nome como exemplo no decorrer do guia. </span> 
 
 **1. Clone o repositório**: \
 `git clone https://github.com/Pedro-Caldas/datamasters-mlops-case.git` 
