@@ -39,7 +39,9 @@ Há no projeto um arquivo Makefile com diversos comandos criados para facilitar 
 <span style="font-size: 0.9em;"> **PS**: Por default, o código atribuirá a um modelo treinado o nome 'bank-model' caso o usuário não atribua um específico. Portanto usaremos esse mesmo nome como exemplo no decorrer do guia. </span> 
 
 **1. Clone o repositório**: \
-`git clone https://github.com/Pedro-Caldas/datamasters-mlops-case.git` \
+`git clone https://github.com/Pedro-Caldas/datamasters-mlops-case.git` 
+
+<span style="font-size: 0.9em;"> **PS**: usaremos a branch `main` </span>
 
 E acesse a pasta \
 `cd datamasters-mlops-case`
@@ -370,13 +372,13 @@ Durante o desenvolvimento deste projeto, ficou mais claro do que nunca que const
 |---------------------------------------|------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
 | Feature engineering & pipeline de pré-processamento | Implantar `ColumnTransformer` + `Pipeline` no scikit-learn e persistir artefatos de pré-processamento | Aumenta a modularidade e permite reaplicar a pipeline em produção sem “drift” por inconsistência |
 | Feature Store & Governança de Features | Evoluir a “feature_registry.yaml” atual para uma implementação de Feature Store (offline + online) com versionamento de features e lookup em produção | Facilita reutilização de features, evita *training-serving skew* e prepara o pipeline para escala real de ML |
-| Kedro para pipeline de ciência de dados | Implementar um framework (ex.: Kedro) para estruturar pipelines modulares que permitam aos cientistas de dados criar modelos já prontos para produção | Garante modularidade, reutilização e transição mais suave dos protótipos para a produção |
+| Kedro para pipeline de ciência de dados | Implementar algum framework (ex.: Kedro) para estruturar pipelines modulares que permitam aos cientistas de dados criar modelos já prontos para produção | Garante modularidade, reutilização e transição mais suave dos protótipos para a produção |
 | Orquestração de fluxo de trabalho     | Integrar um orquestrador como Apache Airflow ou Prefect para agendamento de dados e monitoramento de pipeline | Facilita automação real de ETL, treino, inferência e re-treino, o que eleva a maturidade do sistema |
 | Implantação em produção com escalabilidade real | Migrar da configuração Docker Compose para um cluster Kubernetes com autoscaling, replicação de serviço e balanceamento de carga | Garante que a solução suporte picos, seja resiliente e tenha arquitetura cloud-native           |
 | Gestão de Secrets & Configs em Kubernetes | Evoluir o uso atual de variáveis de ambiente (hoje com .env.example) para, por exemplo, modelos de ConfigMaps e Secrets no Kubernetes | Fortalece segurança, versionamento de configurações sensíveis, facilita implantação em cluster e segue boas práticas de orquestração de containers|
 | Monitoramento avançado & alertas      | Adicionar dashboard de métricas (ex.: Grafana + Prometheus), alertas de drift, latência, erro e gatilhos de re-treino automático | Eleva o nível de observabilidade para produção real, reduz risco de degradação silenciosa      |
 | Hiper-tuning e A/B testing            | Introduzir frameworks para otimização de hiper-parâmetros (ex.: Optuna) e comparar versões de modelos em produção | Permite melhoria contínua da performance do modelo, aumentando valor de negócio                |
-| Melhorar diagrama de arquiterura do README   | Fazer um mais bonito no Excalidraw ou draw.io   | Faltou uma cor pra dar vida e formosura, além de realçar melhor os fluxos do case   |
+| Melhorar diagrama de arquiterura do README   | Fazer um mais bonito no Excalidraw ou draw.io   | Faltou uma cor pra dar vida e formosura, além de realçar melhor os fluxos da solução   |
 
 Essas são algumas melhorias que demonstram o fluxo de evolução da solução. A ideia é mostrar que as decisões tomadas foram conscientes e estratégicas, mas que também tenho clareza sobre as **diversas possibilidades** de incrementos e melhorias contínuas.
 
