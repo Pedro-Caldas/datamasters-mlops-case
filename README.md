@@ -1,4 +1,4 @@
-# DataMasters - Case de Engenharia de Machine Learning
+# Data Masters - Case de Engenharia de Machine Learning
 
 **Autor**: Pedro Neris Luiz Caldas
 
@@ -12,7 +12,7 @@
 3. [Plano de Implementação](#3-plano-de-implementação)  
    - [3.1 Levantamento de requisitos](#31-levantamento-de-requisitos)  
    - [3.2 Aquisição e Preparação de Dados](#32-aquisição-e-preparação-de-dados)  
-   - [3.3 Desenvolvimento, Tracking e Registro do Modelo](#33-desenvolvimento-tracking-e-registro-do-modelo)
+   - [3.3 Desenvolvimento, Tracking e Registro do Modelo](#33-desenvolvimento-tracking-e-registro-do-modelo-de-machine-learning)
    - [3.4 Integração Contínua e Implantação](#34-integração-contínua-e-implantação)  
    - [3.5 Monitoramento e Métricas de Produção](#35-monitoramento-e-métricas-de-produção)  
    - [3.5.1 Serving do Modelo](#351-serving-do-modelo)  
@@ -24,7 +24,7 @@
 
 ### 1. Objetivo do Case e Como Executá-lo
 
-Neste repositório consta a solução que desenvolvi para o Case de Engenharia de Machine Learning do programa Data. O foco foi projetar e implementar uma arquitetura completa de MLOps — capaz de receber dados brutos, treinar e versionar modelos, automatizar o pipeline, disponibilizar inferência online e monitorar em produção —, sempre com escalabilidade e em mente.
+Neste repositório consta a solução que desenvolvi para o Case de Engenharia de Machine Learning do programa Data Masters. O foco foi projetar e implementar uma arquitetura completa de MLOps — capaz de receber dados brutos, treinar e versionar modelos, automatizar o pipeline, disponibilizar inferência online e monitorar em produção —, sempre com escalabilidade e em mente.
 
 Para ilustrar o projeto, escolhi trabalhar com o dataset Bank Marketing (da UCI), focado em Marketing/CRM em um cenário bancário. O objetivo é, basicamente, prever se um cliente assinará um depósito a prazo ou não. Aqui eu tentei fugir um pouco dos clássicos modelos de risco, crédito etc. e ir pra algo diferente. Mesmo sendo um conjunto de dados de tamanho relativamente pequeno, ele permite demonstrar todos os principais blocos do ciclo de vida de um modelo de ML: ingestão de dados, transformação e gerenciamento de features, treino com diferentes algoritmos, tracking e registro de modelo, inferência batch e online, monitoramento de produção e execução via ambiente conteinerizado com CI/CD.
 
@@ -332,7 +332,7 @@ Na fase inicial, definiu-se:
 - Estatísticas do treino (n_train, n_test, n_features, feature_stats=descrição de X_train) são persistidas em banco PostgreSQL na tabela `training_data`.
 - Os modelos podem ser versionados e levados a estágios como Staging e Production. Sempre que uma nova versão de um modelo entra em estágio de Production, a anterior é arquivada.
 - **Poderia ter sido feito**: aqui poderíamos ir muito longe. Hyper-tuning automatizado (GridSearch/RandomSearch/Optuna), comparação com algoritmos mais avançados (XGBoost, LightGBM), cross-validation mais extensa, pipeline de features customizadas, automação de seleção de features. Tudo isso de forma dinâmica e abstraída para o usuário (ex.: usuário poderia criar um arquivo de config com os modelos que quer usar, métricas, features etc.).
-- **Motivo do trade-off**: A opção por dois modelos clássicos e parâmetros fixos permitiu focar mais na orquestração e na engenharia de MLOps do que em ajuste fino de modelo. Posso estar errado, mas penso que o aprofundamento no treinamento do modelo (apesar de muito bem-vindo a um Engenheiro de ML), é avaliado na carreira de Cientista de Dados do programa Datamaster.
+- **Motivo do trade-off**: A opção por dois modelos clássicos e parâmetros fixos permitiu focar mais na orquestração e na engenharia de MLOps do que em ajuste fino de modelo. Posso estar errado, mas penso que o aprofundamento no treinamento do modelo (apesar de muito bem-vindo a um Engenheiro de ML), é avaliado na carreira de Cientista de Dados do programa Data Masters.
 
 #### 3.4 Integração Contínua e Implantação  
 - O repositório possui arquivo `.github/workflows/ci.yaml` que define pipeline de CI: a cada push ou pull request para qualquer branch, são executados checkout, setup Python 3.11, instalação das dependências (`pip install -e ".[dev]"`), criação de `.env` de exemplo, lint (`make lint`), testes (`make test`), geração de dados (`make data-bank`), treino em modo CI (`make train-bank MODEL_NAME=ci-test`), e promoção de modelo para “Production” no ambiente local. Como parte da estratégia de governança de modelos, o pipeline permite promover versões via MLflow também para o estágio ‘Staging’ antes da transição para ‘Production’. Em ambiente real é recomendável que apenas modelos com estágio Production possam servir de fato, garantindo controle de segurança, aprovação de versões e compliance organizacional, por isso aplicamos essa política aqui também no projeto.
@@ -376,6 +376,7 @@ Durante o desenvolvimento deste projeto, ficou mais claro do que nunca que const
 | Gestão de Secrets & Configs em Kubernetes | Evoluir o uso atual de variáveis de ambiente (hoje com .env.example) para, por exemplo, modelos de ConfigMaps e Secrets no Kubernetes | Fortalece segurança, versionamento de configurações sensíveis, facilita implantação em cluster e segue boas práticas de orquestração de containers|
 | Monitoramento avançado & alertas      | Adicionar dashboard de métricas (ex.: Grafana + Prometheus), alertas de drift, latência, erro e gatilhos de re-treino automático | Eleva o nível de observabilidade para produção real, reduz risco de degradação silenciosa      |
 | Hiper-tuning e A/B testing            | Introduzir frameworks para otimização de hiper-parâmetros (ex.: Optuna) e comparar versões de modelos em produção | Permite melhoria contínua da performance do modelo, aumentando valor de negócio                |
+| Melhorar diagrama de arquiterura do README   | Fazer um mais bonito no Excalidraw ou draw.io   | Faltou uma cor pra dar vida e formosura, além de realçar melhor os fluxos do case   |
 
 Essas são algumas melhorias que demonstram o fluxo de evolução da solução. A ideia é mostrar que as decisões tomadas foram conscientes e estratégicas, mas que também tenho clareza sobre as **diversas possibilidades** de incrementos e melhorias contínuas.
 
